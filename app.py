@@ -1,60 +1,37 @@
-# Flask utils
 from flask import Flask, redirect, url_for, request, render_template
-from werkzeug.utils import secure_filename
-from gevent.pywsgi import WSGIServer
-
 import pickle
 import requests
-from bs4 import BeautifulSoup
-# Define a flask app
-from flask_cors import CORS
+
 app = Flask(__name__)
-CORS(app)
+
 @app.route('/', methods=['GET'])
 def index():
-    # Main page
     return render_template('index.html')
 
-
-@app.route('/predict',methods=['GET','POST'])
+@app.route('/predict', methods=['POST'])
 def predict():
-    if request.method == "POST":
+    if request.method == 'POST':
         url = request.get_json()
-        print(url)
-        data=[url]
+        data = [url]
+
         loaded_model = pickle.load(open('phishing.pkl', 'rb'))
         op = loaded_model.predict(data)
-        print(op[0])
-        print()
-        result={}
-        result['op']=op[0]
-        if(op[0]=="bad"):
+
+        result = {'op': op[0]}
+        if op[0] == 'bad':
             try:
-                links_with_text = []
-                req = requests.get(url)       
-                soup = BeautifulSoup(req.text,"html.parser")
-                for line in soup.find_all('a'):
-                    href = line.get('href')
-                    links_with_text.append(href)
-            
-                result['links']=links_with_text
-                headers = {'x-api-key': '53401fd5-1dd3-479c-9826-e949598451ab'}
-                response = requests.post('https://api.geekflare.com/dnsrecord', json = {
-                "url": url
-                },headers=headers)
-                res=response.json()
-                # print(res['data'][0]['country'])
-                # print(res['data'][0]['data']['A'][0])
-                result['ip']=res['data'][0]['data']['A'][0]
-                result['location']=res['data'][0]['country']
+                headers = {'x-api-key': '16f92d0f-3f6c-41e6-88ad-503e3a81b944'}
+                response_geekflare = requests.post('https://api.geekflare.com/dnsrecord', json={"url": url}, headers=headers)
+                res_geekflare = response_geekflare.json()
+                result['ip'] = res_geekflare['data']['A'][0]['address']
+                
+                response_ipgeo = requests.get(f'https://api.ipgeolocation.io/ipgeo?apiKey=61445e6713a5443f8ac3c717d26b6d0a&ip={result["ip"]}')
+                geolocation_data = response_ipgeo.json()
+                result['location'] = geolocation_data.get('country_name', 'Unknown')
             except:
                 return result
 
         return result
-    return None
-
-
 
 if __name__ == '__main__':
-   app.debug=True 
-   app.run()
+    app.run(debug=True)
